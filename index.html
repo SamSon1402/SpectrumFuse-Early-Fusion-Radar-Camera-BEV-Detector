@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpectrumFuse — Early Fusion Radar-Camera BEV Detector | Zendar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --zen-blue: #00d4ff;
+            --zen-orange: #ff6b35;
+            --zen-green: #00e676;
+            --zen-red: #ff3d71;
+            --zen-purple: #7c4dff;
+            --zen-yellow: #ffd740;
+            --bg-0: #0a0e1a;
+            --bg-1: #111827;
+            --bg-2: #1a2235;
+            --bg-3: #243044;
+            --text-0: #f0f4ff;
+            --text-1: #a0aec0;
+            --text-2: #5a6a85;
+            --border: #2a3650;
+            --radar-green: #00ff88;
+            --camera-blue: #00aaff;
+            --fused-gradient: linear-gradient(135deg, #00d4ff 0%, #ff6b35 50%, #00e676 100%);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-0);
+            color: var(--text-0);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        /* Header */
+        .topbar {
+            background: rgba(17, 24, 39, 0.95);
+            border-bottom: 1px solid var(--border);
+            padding: 0.6rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .brand-icon {
+            width: 40px; height: 40px;
+            background: var(--fused-gradient);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+        }
+        .brand-name {
+            font-size: 1.3rem;
+            font-weight: 800;
+            background: var(--fused-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .brand-sub {
+            font-size: 0.55rem;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 2.5px;
+            font-weight: 500;
+        }
+        .pills { display: flex; gap: 0.35rem; }
+        .pill {
+            padding: 0.3rem 0.6rem;
+            border-radius: 5px;
+            font-size: 0.6rem;
+            font-family: 'Space Mono', monospace;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            color: var(--text-1);
+        }
+        .pill.live {
+            background: rgba(0, 230, 118, 0.15);
+            border-color: var(--zen-green);
+            color: var(--zen-green);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+        /* Main */
+        .shell {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 1.2rem 1.5rem;
+        }
+        .title-row {
+            text-align: center;
+            margin-bottom: 1.2rem;
+        }
+        .title-row h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            background: var(--fused-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.25rem;
+        }
+        .title-row p { color: var(--text-1); font-size: 0.9rem; }
+        /* Grid */
+        .dash {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        @media(max-width:1200px){ .dash{grid-template-columns:1fr;} }
+        .panel {
+            background: var(--bg-1);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .panel-head {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(26, 34, 53, 0.5);
+        }
+        .panel-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .panel-tag {
+            font-size: 0.6rem;
+            font-family: 'Space Mono', monospace;
+            color: var(--text-2);
+        }
+        .panel-body { padding: 1rem; }
+        /* Camera View */
+        .cam-view {
+            position: relative;
+            background: var(--bg-0);
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 16/10;
+            margin-bottom: 0.75rem;
+        }
+        .cam-view img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            filter: brightness(0.7) contrast(1.2) saturate(0.9);
+        }
+        .cam-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+        .cam-label {
+            position: absolute;
+            top: 8px; left: 8px;
+            background: rgba(0, 170, 255, 0.9);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+        }
+        .cam-bbox {
+            position: absolute;
+            border: 2px solid var(--camera-blue);
+            border-radius: 3px;
+            transition: all 0.4s;
+        }
+        .cam-bbox-label {
+            position: absolute;
+            top: -18px; left: 0;
+            background: var(--camera-blue);
+            color: #000;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 0.55rem;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            white-space: nowrap;
+        }
+        /* Radar View */
+        .radar-view {
+            position: relative;
+            background: var(--bg-0);
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            margin-bottom: 0.75rem;
+        }
+        .radar-canvas {
+            width: 100%; height: 100%;
+        }
+        .radar-label {
+            position: absolute;
+            top: 8px; left: 8px;
+            background: rgba(0, 255, 136, 0.9);
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+        }
+        /* BEV View */
+        .bev-view {
+            position: relative;
+            background: var(--bg-0);
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            margin-bottom: 0.75rem;
+        }
+        .bev-canvas { width: 100%; height: 100%; }
+        .bev-label {
+            position: absolute;
+            top: 8px; left: 8px;
+            background: var(--fused-gradient);
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+        }
+        /* Stats row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .stat-box {
+            background: var(--bg-2);
+            border-radius: 8px;
+            padding: 0.6rem;
+            text-align: center;
+        }
+        .stat-val {
+            font-size: 1.1rem;
+            font-weight: 800;
+            font-family: 'Space Mono', monospace;
+        }
+        .stat-val.blue { color: var(--zen-blue); }
+        .stat-val.green { color: var(--zen-green); }
+        .stat-val.orange { color: var(--zen-orange); }
+        .stat-val.purple { color: var(--zen-purple); }
+        .stat-lbl {
+            font-size: 0.55rem;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        /* Bottom row */
+        .bottom {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+        }
+        @media(max-width:1200px){ .bottom{grid-template-columns:1fr;} }
+        /* Controls */
+        .ctrl-row {
+            display: flex;
+            gap: 0.4rem;
+            margin-bottom: 0.75rem;
+        }
+        .ctrl-btn {
+            flex: 1;
+            padding: 0.6rem;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-0);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+        .ctrl-btn:hover { border-color: var(--zen-blue); background: rgba(0, 212, 255, 0.1); }
+        .ctrl-btn.on { border-color: var(--zen-green); background: rgba(0, 230, 118, 0.15); color: var(--zen-green); }
+        /* Fusion Pipeline */
+        .pipeline {
+            background: var(--bg-2);
+            border-radius: 10px;
+            padding: 0.8rem;
+            margin-bottom: 0.75rem;
+        }
+        .pipe-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            margin-bottom: 0.6rem;
+            color: var(--text-1);
+        }
+        .pipe-steps {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+        }
+        .pipe-step {
+            padding: 0.35rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.6rem;
+            font-weight: 600;
+            font-family: 'Space Mono', monospace;
+            border: 1px solid var(--border);
+            background: var(--bg-1);
+            transition: all 0.3s;
+        }
+        .pipe-step.active {
+            border-color: var(--zen-blue);
+            background: rgba(0, 212, 255, 0.15);
+            color: var(--zen-blue);
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.2);
+        }
+        .pipe-arrow {
+            color: var(--text-2);
+            font-size: 0.7rem;
+        }
+        /* Detection Log */
+        .det-log {
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .det-entry {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: var(--bg-2);
+            border-radius: 8px;
+            margin-bottom: 0.4rem;
+            border-left: 3px solid var(--zen-blue);
+            animation: slideIn 0.3s ease;
+        }
+        .det-entry.alert { border-left-color: var(--zen-red); }
+        @keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+        .det-icon {
+            width: 28px; height: 28px;
+            background: rgba(0, 212, 255, 0.2);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+        .det-entry.alert .det-icon { background: rgba(255, 61, 113, 0.2); }
+        .det-text { flex: 1; }
+        .det-name { font-size: 0.7rem; font-weight: 600; }
+        .det-meta { font-size: 0.58rem; color: var(--text-2); font-family: 'Space Mono', monospace; }
+        .det-conf { font-size: 0.7rem; font-weight: 700; font-family: 'Space Mono', monospace; color: var(--zen-blue); }
+        .det-entry.alert .det-conf { color: var(--zen-red); }
+        /* Weather toggle */
+        .weather-bar {
+            display: flex;
+            gap: 0.3rem;
+            margin-bottom: 0.75rem;
+        }
+        .weather-btn {
+            flex: 1;
+            padding: 0.5rem;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-1);
+            font-size: 0.7rem;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .weather-btn.active {
+            border-color: var(--zen-yellow);
+            background: rgba(255, 215, 64, 0.1);
+            color: var(--zen-yellow);
+        }
+        .weather-btn:hover { border-color: var(--zen-blue); }
+        /* Metric bars */
+        .metric-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .metric-label {
+            width: 80px;
+            font-size: 0.65rem;
+            color: var(--text-1);
+            font-weight: 600;
+        }
+        .metric-track {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-0);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .metric-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s;
+        }
+        .metric-fill.cam { background: var(--camera-blue); }
+        .metric-fill.rad { background: var(--radar-green); }
+        .metric-fill.fused { background: var(--fused-gradient); }
+        .metric-val {
+            width: 40px;
+            text-align: right;
+            font-size: 0.65rem;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+        }
+        /* Overlay */
+        .loading-overlay {
+            position: fixed; inset: 0;
+            background: rgba(10, 14, 26, 0.97);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .loading-overlay.show { display: flex; }
+        .loader-ring {
+            width: 80px; height: 80px;
+            border: 4px solid var(--bg-3);
+            border-top-color: var(--zen-blue);
+            border-right-color: var(--zen-orange);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1.5rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loader-text { font-size: 1rem; font-weight: 700; margin-bottom: 0.3rem; }
+        .loader-stage { font-size: 0.8rem; color: var(--text-2); font-family: 'Space Mono', monospace; margin-bottom: 1rem; }
+        .loader-bar-track { width: 240px; height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden; }
+        .loader-bar-fill { height: 100%; background: var(--fused-gradient); width: 0%; transition: width 0.3s; }
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 1rem; right: 1rem;
+            background: var(--bg-1); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.7rem 1rem;
+            display: flex; align-items: center; gap: 0.5rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            transform: translateY(80px); opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
+            z-index: 1000;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast-icon { font-size: 1.1rem; }
+        .toast-title { font-size: 0.8rem; font-weight: 600; }
+        .toast-msg { font-size: 0.6rem; color: var(--text-2); }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg-0); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand">
+        <div class="brand-icon">📡</div>
+        <div>
+            <div class="brand-name">SpectrumFuse</div>
+            <div class="brand-sub">Zendar Early Fusion BEV</div>
+        </div>
+    </div>
+    <div class="pills">
+        <span class="pill live">● LIVE</span>
+        <span class="pill">Cross-Attention Fusion</span>
+        <span class="pill">BEV Projection</span>
+        <span class="pill">nuScenes / Zendar Dataset</span>
+    </div>
+</div>
+
+<div class="shell">
+    <div class="title-row">
+        <h1>📡 SpectrumFuse — Early Fusion Radar-Camera BEV</h1>
+        <p>Raw radar spectrum + camera features fused via cross-attention, projected to Bird's Eye View for 3D detection</p>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-box"><div class="stat-val blue" id="sInference">—</div><div class="stat-lbl">Fusion Latency (ms)</div></div>
+        <div class="stat-box"><div class="stat-val green" id="sDetections">0</div><div class="stat-lbl">Detections</div></div>
+        <div class="stat-box"><div class="stat-val orange" id="sMAP">—</div><div class="stat-lbl">mAP@0.5</div></div>
+        <div class="stat-box"><div class="stat-val purple" id="sFPS">0</div><div class="stat-lbl">FPS</div></div>
+    </div>
+
+    <div class="dash">
+        <!-- Camera -->
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">📷 Camera Input</span>
+                <span class="panel-tag">Front-Center • 1600×900</span>
+            </div>
+            <div class="panel-body">
+                <div class="cam-view">
+                    <img src="https://images.unsplash.com/photo-1485463611174-f302f6a5c1c9?w=800" alt="Driving scene">
+                    <div class="cam-overlay" id="camOverlay"></div>
+                    <div class="cam-label">CAMERA — RGB</div>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Camera-only</span>
+                    <div class="metric-track"><div class="metric-fill cam" id="camMetric" style="width:0%"></div></div>
+                    <span class="metric-val" id="camVal">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Radar -->
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">📡 Radar Spectrum</span>
+                <span class="panel-tag">Range-Azimuth • 5D</span>
+            </div>
+            <div class="panel-body">
+                <div class="radar-view">
+                    <canvas class="radar-canvas" id="radarCanvas"></canvas>
+                    <div class="radar-label">RADAR — Raw Spectrum</div>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Radar-only</span>
+                    <div class="metric-track"><div class="metric-fill rad" id="radMetric" style="width:0%"></div></div>
+                    <span class="metric-val" id="radVal">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fused BEV -->
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">🗺️ Fused BEV Output</span>
+                <span class="panel-tag">200m × 200m • 0.2m/cell</span>
+            </div>
+            <div class="panel-body">
+                <div class="bev-view">
+                    <canvas class="bev-canvas" id="bevCanvas"></canvas>
+                    <div class="bev-label">FUSED — Bird's Eye View</div>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Fused</span>
+                    <div class="metric-track"><div class="metric-fill fused" id="fusedMetric" style="width:0%"></div></div>
+                    <span class="metric-val" id="fusedVal">—</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom">
+        <!-- Controls + Pipeline -->
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">⚙️ Controls & Pipeline</span>
+            </div>
+            <div class="panel-body">
+                <div class="ctrl-row">
+                    <button class="ctrl-btn" id="runBtn" onclick="toggleRun()">▶️ <span id="runLabel">Start Fusion</span></button>
+                    <button class="ctrl-btn" onclick="resetAll()">🔄 Reset</button>
+                    <button class="ctrl-btn" onclick="injectDetection()">🎯 Inject</button>
+                </div>
+                <div class="pipe-title">Fusion Pipeline</div>
+                <div class="pipeline">
+                    <div class="pipe-steps">
+                        <div class="pipe-step" id="ps0">Camera Backbone</div>
+                        <span class="pipe-arrow">→</span>
+                        <div class="pipe-step" id="ps1">Radar Encoder</div>
+                        <span class="pipe-arrow">→</span>
+                        <div class="pipe-step" id="ps2">Cross-Attention</div>
+                        <span class="pipe-arrow">→</span>
+                        <div class="pipe-step" id="ps3">BEV Projection</div>
+                        <span class="pipe-arrow">→</span>
+                        <div class="pipe-step" id="ps4">Detection Head</div>
+                    </div>
+                </div>
+                <div class="weather-bar">
+                    <button class="weather-btn active" onclick="setWeather('clear',this)">☀️ Clear</button>
+                    <button class="weather-btn" onclick="setWeather('rain',this)">🌧️ Rain</button>
+                    <button class="weather-btn" onclick="setWeather('fog',this)">🌫️ Fog</button>
+                    <button class="weather-btn" onclick="setWeather('night',this)">🌙 Night</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">📊 Fusion Advantage</span>
+                <span class="panel-tag" id="weatherLabel">CLEAR</span>
+            </div>
+            <div class="panel-body">
+                <div class="metric-row">
+                    <span class="metric-label">Camera mAP</span>
+                    <div class="metric-track"><div class="metric-fill cam" id="cmpCam" style="width:0%"></div></div>
+                    <span class="metric-val" id="cmpCamVal">—</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Radar mAP</span>
+                    <div class="metric-track"><div class="metric-fill rad" id="cmpRad" style="width:0%"></div></div>
+                    <span class="metric-val" id="cmpRadVal">—</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Fused mAP</span>
+                    <div class="metric-track"><div class="metric-fill fused" id="cmpFused" style="width:0%"></div></div>
+                    <span class="metric-val" id="cmpFusedVal">—</span>
+                </div>
+                <div class="metric-row" style="margin-top:0.5rem">
+                    <span class="metric-label">Cam NDS</span>
+                    <div class="metric-track"><div class="metric-fill cam" id="ndsCam" style="width:0%"></div></div>
+                    <span class="metric-val" id="ndsCamVal">—</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Rad NDS</span>
+                    <div class="metric-track"><div class="metric-fill rad" id="ndsRad" style="width:0%"></div></div>
+                    <span class="metric-val" id="ndsRadVal">—</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Fused NDS</span>
+                    <div class="metric-track"><div class="metric-fill fused" id="ndsFused" style="width:0%"></div></div>
+                    <span class="metric-val" id="ndsFusedVal">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detection log -->
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">📋 Detection Log</span>
+                <span class="panel-tag" id="logCount">0 events</span>
+            </div>
+            <div class="panel-body">
+                <div class="det-log" id="detLog">
+                    <div style="color:var(--text-2);font-size:0.75rem;text-align:center;padding:1.5rem;">Start fusion to see detections</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loader-ring"></div>
+    <div class="loader-text">Initializing SpectrumFuse...</div>
+    <div class="loader-stage" id="loadStage">Loading camera backbone...</div>
+    <div class="loader-bar-track"><div class="loader-bar-fill" id="loadBar"></div></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+    <span class="toast-icon" id="toastIcon">✅</span>
+    <div><div class="toast-title" id="toastTitle">OK</div><div class="toast-msg" id="toastMsg">msg</div></div>
+</div>
+
+<script>
+let running = false, interval = null, detCount = 0, logItems = [];
+const classes = ['Car','Truck','Bus','Pedestrian','Cyclist','Motorcycle','Barrier','Cone'];
+const weatherData = {
+    clear:  { cam: 72, rad: 41, fused: 84, camNDS: 68, radNDS: 45, fusedNDS: 80 },
+    rain:   { cam: 48, rad: 39, fused: 76, camNDS: 42, radNDS: 43, fusedNDS: 72 },
+    fog:    { cam: 31, rad: 38, fused: 71, camNDS: 28, radNDS: 42, fusedNDS: 67 },
+    night:  { cam: 35, rad: 40, fused: 73, camNDS: 31, radNDS: 44, fusedNDS: 69 },
+};
+let currentWeather = 'clear';
+
+function toggleRun() {
+    if(!running) startFusion(); else stopFusion();
+}
+
+function startFusion() {
+    const ov = document.getElementById('loadingOverlay');
+    ov.classList.add('show');
+    const stages = ['Loading camera backbone (Swin-T)...','Initializing radar spectrum encoder...','Building cross-attention layers...','Setting up BEV grid (1000×1000)...','Compiling TensorRT engine...','Connecting sensor streams...','Starting inference loop...'];
+    let p = 0, si = 0;
+    const bar = document.getElementById('loadBar');
+    const stg = document.getElementById('loadStage');
+    const iv = setInterval(() => {
+        p += Math.random()*16+6;
+        if(p>100) p=100;
+        bar.style.width = p+'%';
+        const ns = Math.floor(p/100*stages.length);
+        if(ns!==si && ns<stages.length){ si=ns; stg.textContent=stages[si]; }
+        if(p>=100){ clearInterval(iv); setTimeout(()=>{ ov.classList.remove('show'); beginFusion(); },300); }
+    },90);
+}
+
+function beginFusion() {
+    running = true;
+    document.getElementById('runBtn').classList.add('on');
+    document.getElementById('runLabel').textContent = 'Pause Fusion';
+    animatePipeline();
+    updateWeatherMetrics();
+    interval = setInterval(tick, 600);
+    toast('Fusion Active','Real-time radar-camera fusion running');
+}
+
+function stopFusion() {
+    running = false;
+    document.getElementById('runBtn').classList.remove('on');
+    document.getElementById('runLabel').textContent = 'Resume Fusion';
+    if(interval) clearInterval(interval);
+    document.querySelectorAll('.pipe-step').forEach(s=>s.classList.remove('active'));
+    toast('Paused','Fusion pipeline suspended');
+}
+
+function resetAll() {
+    stopFusion(); detCount=0; logItems=[];
+    document.getElementById('sDetections').textContent='0';
+    document.getElementById('sInference').textContent='—';
+    document.getElementById('sMAP').textContent='—';
+    document.getElementById('sFPS').textContent='0';
+    document.getElementById('camOverlay').innerHTML='';
+    document.getElementById('detLog').innerHTML='<div style="color:var(--text-2);font-size:0.75rem;text-align:center;padding:1.5rem;">Start fusion to see detections</div>';
+    document.getElementById('logCount').textContent='0 events';
+    ['camMetric','radMetric','fusedMetric'].forEach(id=>{document.getElementById(id).style.width='0%';});
+    ['camVal','radVal','fusedVal'].forEach(id=>{document.getElementById(id).textContent='—';});
+    clearBEV(); clearRadar();
+    toast('Reset','All data cleared');
+}
+
+let pipeStep = 0;
+function animatePipeline() {
+    if(!running) return;
+    document.querySelectorAll('.pipe-step').forEach(s=>s.classList.remove('active'));
+    document.getElementById('ps'+pipeStep).classList.add('active');
+    pipeStep = (pipeStep+1)%5;
+    setTimeout(animatePipeline, 250);
+}
+
+function tick() {
+    const inf = 35+Math.random()*25;
+    document.getElementById('sInference').textContent = inf.toFixed(0);
+    document.getElementById('sFPS').textContent = Math.floor(18+Math.random()*8);
+    const w = weatherData[currentWeather];
+    const mAP = w.fused + (Math.random()*6-3);
+    document.getElementById('sMAP').textContent = mAP.toFixed(1)+'%';
+    document.getElementById('camMetric').style.width = (w.cam+Math.random()*4-2)+'%';
+    document.getElementById('camVal').textContent = w.cam.toFixed(0)+'%';
+    document.getElementById('radMetric').style.width = (w.rad+Math.random()*4-2)+'%';
+    document.getElementById('radVal').textContent = w.rad.toFixed(0)+'%';
+    document.getElementById('fusedMetric').style.width = (w.fused+Math.random()*4-2)+'%';
+    document.getElementById('fusedVal').textContent = w.fused.toFixed(0)+'%';
+
+    drawRadar();
+    drawBEV();
+
+    if(Math.random()>0.4) addCamDetection();
+}
+
+function addCamDetection() {
+    const ov = document.getElementById('camOverlay');
+    const cls = classes[Math.floor(Math.random()*classes.length)];
+    const conf = (70+Math.random()*28).toFixed(1);
+    const x = 5+Math.random()*75, y = 15+Math.random()*55;
+    const w = 30+Math.random()*60, h = 25+Math.random()*50;
+    const isAlert = cls==='Pedestrian' && Math.random()>0.5;
+    const box = document.createElement('div');
+    box.className = 'cam-bbox';
+    box.style.cssText = `left:${x}%;top:${y}%;width:${w}px;height:${h}px;${isAlert?'border-color:var(--zen-red);box-shadow:0 0 15px rgba(255,61,113,0.4);':''}`;
+    const lbl = document.createElement('div');
+    lbl.className = 'cam-bbox-label';
+    lbl.style.cssText = isAlert ? 'background:var(--zen-red);' : '';
+    lbl.textContent = `${cls} ${conf}%`;
+    box.appendChild(lbl);
+    ov.appendChild(box);
+    setTimeout(()=>box.remove(), 2500);
+
+    detCount++;
+    document.getElementById('sDetections').textContent = detCount;
+    addLogEntry(cls, conf, isAlert);
+}
+
+function addLogEntry(cls, conf, isAlert) {
+    const log = document.getElementById('detLog');
+    if(logItems.length===0) log.innerHTML='';
+    const range = (5+Math.random()*80).toFixed(1);
+    const vel = (Math.random()*120).toFixed(0);
+    const el = document.createElement('div');
+    el.className = 'det-entry'+(isAlert?' alert':'');
+    el.innerHTML = `
+        <div class="det-icon">${isAlert?'⚠️':'🎯'}</div>
+        <div class="det-text">
+            <div class="det-name">${cls}</div>
+            <div class="det-meta">Range: ${range}m • Vel: ${vel}km/h • ${currentWeather}</div>
+        </div>
+        <div class="det-conf">${conf}%</div>`;
+    log.insertBefore(el, log.firstChild);
+    logItems.unshift(el);
+    if(logItems.length>25){ logItems.pop().remove(); }
+    document.getElementById('logCount').textContent = logItems.length+' events';
+}
+
+function injectDetection() {
+    if(running) addCamDetection();
+    else toast('Not Running','Start fusion first');
+}
+
+// Radar canvas
+function drawRadar() {
+    const c = document.getElementById('radarCanvas');
+    const ctx = c.getContext('2d');
+    if(c.width !== c.offsetWidth){ c.width=c.offsetWidth; c.height=c.offsetHeight; }
+    ctx.fillStyle = '#0a0e1a';
+    ctx.fillRect(0,0,c.width,c.height);
+    const cx=c.width/2, cy=c.height;
+    // Sweep arcs
+    for(let r=0.2;r<=1;r+=0.2){
+        ctx.strokeStyle = 'rgba(0,255,136,0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx,cy,r*c.height*0.9, Math.PI, 0);
+        ctx.stroke();
+    }
+    // Radial lines
+    for(let a=-80;a<=80;a+=20){
+        const rad = a*Math.PI/180;
+        ctx.strokeStyle = 'rgba(0,255,136,0.08)';
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.lineTo(cx+Math.sin(rad)*c.height*0.9, cy-Math.cos(rad)*c.height*0.9);
+        ctx.stroke();
+    }
+    // Points
+    for(let i=0;i<40;i++){
+        const angle = (Math.random()*160-80)*Math.PI/180;
+        const dist = 0.1+Math.random()*0.85;
+        const px = cx+Math.sin(angle)*dist*c.height*0.9;
+        const py = cy-Math.cos(angle)*dist*c.height*0.9;
+        const intensity = Math.random();
+        const size = 2+intensity*4;
+        ctx.fillStyle = `rgba(0,255,136,${0.3+intensity*0.7})`;
+        ctx.beginPath(); ctx.arc(px,py,size,0,Math.PI*2); ctx.fill();
+        if(intensity>0.7){
+            ctx.fillStyle = `rgba(0,255,136,0.1)`;
+            ctx.beginPath(); ctx.arc(px,py,size*3,0,Math.PI*2); ctx.fill();
+        }
+    }
+    // Doppler velocity lines for strong returns
+    for(let i=0;i<8;i++){
+        const angle = (Math.random()*120-60)*Math.PI/180;
+        const dist = 0.2+Math.random()*0.6;
+        const px = cx+Math.sin(angle)*dist*c.height*0.9;
+        const py = cy-Math.cos(angle)*dist*c.height*0.9;
+        const vel = (Math.random()-0.5)*30;
+        ctx.strokeStyle = vel>0 ? 'rgba(255,107,53,0.6)' : 'rgba(0,212,255,0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px,py);
+        ctx.lineTo(px+vel*1.5, py);
+        ctx.stroke();
+    }
+}
+
+function clearRadar() {
+    const c = document.getElementById('radarCanvas');
+    const ctx = c.getContext('2d');
+    if(c.width!==c.offsetWidth){c.width=c.offsetWidth;c.height=c.offsetHeight;}
+    ctx.fillStyle='#0a0e1a';ctx.fillRect(0,0,c.width,c.height);
+}
+
+// BEV canvas
+function drawBEV() {
+    const c = document.getElementById('bevCanvas');
+    const ctx = c.getContext('2d');
+    if(c.width!==c.offsetWidth){c.width=c.offsetWidth;c.height=c.offsetHeight;}
+    ctx.fillStyle='#0a0e1a';ctx.fillRect(0,0,c.width,c.height);
+    const cx=c.width/2, cy=c.height*0.85;
+    // Grid
+    ctx.strokeStyle='rgba(0,212,255,0.06)';
+    ctx.lineWidth=1;
+    for(let i=0;i<c.width;i+=20){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,c.height);ctx.stroke();}
+    for(let i=0;i<c.height;i+=20){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(c.width,i);ctx.stroke();}
+    // Range rings
+    for(let r=0.15;r<=0.8;r+=0.15){
+        ctx.strokeStyle='rgba(0,212,255,0.1)';
+        ctx.beginPath();ctx.arc(cx,cy,r*c.height,0,Math.PI*2);ctx.stroke();
+    }
+    // Ego car
+    ctx.fillStyle='var(--zen-blue)';
+    ctx.fillRect(cx-6,cy-10,12,20);
+    ctx.fillStyle='rgba(0,212,255,0.15)';
+    ctx.beginPath();ctx.moveTo(cx-40,cy);ctx.lineTo(cx,cy-c.height*0.7);ctx.lineTo(cx+40,cy);ctx.fill();
+    // Road lanes
+    ctx.strokeStyle='rgba(255,255,255,0.12)';
+    ctx.setLineDash([8,8]);
+    ctx.beginPath();ctx.moveTo(cx-30,cy);ctx.lineTo(cx-15,cy-c.height*0.7);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+30,cy);ctx.lineTo(cx+15,cy-c.height*0.7);ctx.stroke();
+    ctx.setLineDash([]);
+    // Detected objects
+    const numObj = 4+Math.floor(Math.random()*6);
+    for(let i=0;i<numObj;i++){
+        const ox = cx+(Math.random()-0.5)*c.width*0.6;
+        const oy = cy-0.1*c.height-Math.random()*c.height*0.65;
+        const ow = 8+Math.random()*16;
+        const oh = 4+Math.random()*10;
+        const isClose = oy > cy-c.height*0.3;
+        const heading = Math.random()*Math.PI*2;
+        ctx.save();
+        ctx.translate(ox,oy);
+        ctx.rotate(heading);
+        ctx.fillStyle = isClose ? 'rgba(255,61,113,0.7)' : 'rgba(0,230,118,0.6)';
+        ctx.fillRect(-ow/2,-oh/2,ow,oh);
+        ctx.strokeStyle = isClose ? 'rgba(255,61,113,0.9)' : 'rgba(0,230,118,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-ow/2,-oh/2,ow,oh);
+        // Velocity arrow
+        ctx.strokeStyle = 'rgba(255,215,64,0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-12-Math.random()*10);ctx.stroke();
+        ctx.restore();
+    }
+    // Free space overlay
+    ctx.fillStyle='rgba(0,230,118,0.03)';
+    ctx.beginPath();ctx.moveTo(cx-80,cy);ctx.lineTo(cx-35,cy-c.height*0.65);ctx.lineTo(cx+35,cy-c.height*0.65);ctx.lineTo(cx+80,cy);ctx.fill();
+}
+
+function clearBEV() {
+    const c=document.getElementById('bevCanvas');
+    const ctx=c.getContext('2d');
+    if(c.width!==c.offsetWidth){c.width=c.offsetWidth;c.height=c.offsetHeight;}
+    ctx.fillStyle='#0a0e1a';ctx.fillRect(0,0,c.width,c.height);
+}
+
+function setWeather(w, el) {
+    currentWeather = w;
+    document.querySelectorAll('.weather-btn').forEach(b=>b.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('weatherLabel').textContent = w.toUpperCase();
+    updateWeatherMetrics();
+    toast('Weather: '+w.charAt(0).toUpperCase()+w.slice(1), 'Metrics updated for '+w+' conditions');
+}
+
+function updateWeatherMetrics() {
+    const d = weatherData[currentWeather];
+    const jitter = () => (Math.random()*4-2);
+    document.getElementById('cmpCam').style.width = d.cam+'%';
+    document.getElementById('cmpCamVal').textContent = d.cam+'%';
+    document.getElementById('cmpRad').style.width = d.rad+'%';
+    document.getElementById('cmpRadVal').textContent = d.rad+'%';
+    document.getElementById('cmpFused').style.width = d.fused+'%';
+    document.getElementById('cmpFusedVal').textContent = d.fused+'%';
+    document.getElementById('ndsCam').style.width = d.camNDS+'%';
+    document.getElementById('ndsCamVal').textContent = d.camNDS+'%';
+    document.getElementById('ndsRad').style.width = d.radNDS+'%';
+    document.getElementById('ndsRadVal').textContent = d.radNDS+'%';
+    document.getElementById('ndsFused').style.width = d.fusedNDS+'%';
+    document.getElementById('ndsFusedVal').textContent = d.fusedNDS+'%';
+}
+
+function toast(title, msg) {
+    const t=document.getElementById('toast');
+    document.getElementById('toastTitle').textContent=title;
+    document.getElementById('toastMsg').textContent=msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// Init canvases
+window.addEventListener('load',()=>{
+    setTimeout(()=>{clearRadar();clearBEV();},100);
+});
+window.addEventListener('resize',()=>{if(!running){clearRadar();clearBEV();}});
+</script>
+</body>
+</html>
